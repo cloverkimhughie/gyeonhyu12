@@ -240,6 +240,18 @@
       ['pointerup','pointercancel','pointerleave'].forEach(type => btn.addEventListener(type, () => keys.delete(code)));
     });
 
+    // The bar spans the entire walkable room width. Sweep against its two
+    // faces with player radius, preserving sideways motion and preventing tunneling.
+    function collideRedBar(oldZ, nextZ) {
+      const playerRadius = .45;
+      const front = redBar.position.z + redBarDepth / 2 + playerRadius;
+      const back = redBar.position.z - redBarDepth / 2 - playerRadius;
+      if (oldZ >= front) return Math.max(front, nextZ);
+      if (oldZ <= back) return Math.min(back, nextZ);
+      // Recover to the nearest side if a future spawn starts inside the bar.
+      return oldZ >= redBar.position.z ? Math.max(front, nextZ) : Math.min(back, nextZ);
+    }
+
     function update(dt) {
       movementSpeed=0;
       if (!playing()) return;
@@ -253,7 +265,7 @@
         const dz = (-Math.cos(yaw) * forward - Math.sin(yaw) * side) * speed;
         const limit = roomHalf - wallThickness - .45;
         camera.position.x = THREE.MathUtils.clamp(camera.position.x + dx, -limit, limit);
-        camera.position.z = THREE.MathUtils.clamp(camera.position.z + dz, -limit, limit);
+        camera.position.z = collideRedBar(oldZ, THREE.MathUtils.clamp(camera.position.z + dz, -limit, limit));
       }
       camera.position.y = PLAYER_EYE_HEIGHT;
       // Actual displacement includes wall clamping and diagonal normalization.
