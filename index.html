@@ -120,6 +120,13 @@
     document.querySelector('#help').textContent += ' · 좌클릭 누르기: 연속 발사';
     document.querySelector('#panel p').innerHTML += '<br>좌클릭 누르고 있기: 연속 발사 · 몸통 3회 · 헤드샷 1회 명중 시 점수 획득<br>모바일: 방향 버튼 이동 · 화면 드래그 · 발사 버튼 길게 누르기';
     const ray = new THREE.Raycaster();
+    let movementSpeed = 0;
+    // Arcade spread: sample uniformly over a disk in camera-local aim space.
+    function sampleMovementSpread(speed, random=Math.random) {
+      const radius=Math.tan((6*Math.PI/180)*Math.min(1,Math.max(0,speed)/7.2))*Math.sqrt(random());
+      const angle=random()*Math.PI*2;
+      return {x:Math.cos(angle)*radius, y:Math.sin(angle)*radius};
+    }
     let shots=0, hits=0, score=0, lastShot=-1000, effectUntil=0;
     // Stylized arcade recoil offsets, independent of mouse/touch look input.
     let recoilPitch=0, recoilYaw=0, recoilHeat=0;
@@ -150,7 +157,10 @@
     function shoot() {
       const now=performance.now(); if (!playing() || now-lastShot<180) return;
       lastShot=now; shots++; muzzle.visible=true; blaster.position.z=-.58;
-      scene.updateMatrixWorld(true); ray.setFromCamera(new THREE.Vector2(0,0),camera);
+      scene.updateMatrixWorld(true);
+      const spread=sampleMovementSpread(movementSpeed);
+      const direction=new THREE.Vector3(spread.x,spread.y,-1).normalize().applyQuaternion(camera.getWorldQuaternion(new THREE.Quaternion()));
+      ray.set(camera.getWorldPosition(new THREE.Vector3()),direction);
       // Props and walls block shots; viewmodel and inactive targets are excluded.
       const objects=scene.children.filter(o=>o!==camera && o.visible && !o.isLine);
       const impact=ray.intersectObjects(objects,true)[0];
@@ -218,7 +228,9 @@
     });
 
     function update(dt) {
+      movementSpeed=0;
       if (!playing()) return;
+      const oldX=camera.position.x, oldZ=camera.position.z;
       const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 7.2 : 4.2) * dt;
       let forward = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
       let side = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
@@ -231,6 +243,8 @@
         camera.position.z = THREE.MathUtils.clamp(camera.position.z + dz, -limit, limit);
       }
       camera.position.y = PLAYER_EYE_HEIGHT;
+      // Actual displacement includes wall clamping and diagonal normalization.
+      movementSpeed=dt>0 ? Math.hypot(camera.position.x-oldX,camera.position.z-oldZ)/dt : 0;
     }
 
     function animate(now) {
