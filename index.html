@@ -80,12 +80,17 @@
     for (const x of [-roomHalf + .3, roomHalf - .3]) wallTrim(x, .18, 0, .12, .36, roomSize - .6);
     function wallTrim(x, y, z, w, h, d) { const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), trimMaterial); m.position.set(x,y,z); scene.add(m); }
 
-    // A few simple Roblox-like block props make movement and scale easier to read.
+    // Preserve the mannequin palette; replace the four props with one red crossbar.
     const colors = [0x60a5fa, 0xfbbf24, 0xf87171, 0x34d399];
-    [[-5,.75,-4,1.5],[4,1,-3,2],[-3,.5,3,1],[4.5,.65,3.5,1.3]].forEach(([x,y,z,s], i) => {
-      const cube = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), new THREE.MeshStandardMaterial({ color: colors[i], roughness: .65 }));
-      cube.position.set(x,y,z); cube.castShadow = true; cube.receiveShadow = true; scene.add(cube);
-    });
+    const redBarHeight = .8, redBarDepth = .8;
+    // Spawn faces -Z, so left/right is X. Endpoints meet the walls' inner faces.
+    const redBarWidth = roomSize - wallThickness;
+    const redBar = new THREE.Mesh(
+      new THREE.BoxGeometry(redBarWidth, redBarHeight, redBarDepth),
+      new THREE.MeshStandardMaterial({ color: 0xf87171, roughness: .65 })
+    );
+    redBar.position.set(0, redBarHeight / 2, 3);
+    redBar.castShadow = true; redBar.receiveShadow = true; scene.add(redBar);
 
     // Arcade blaster held in the first-person view; no external model assets.
     scene.add(camera);
