@@ -70,6 +70,7 @@
     const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xe7e5e4, roughness: .9 });
     function wall(x, z, width, depth) {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, wallHeight, depth), wallMaterial);
+      mesh.userData.isWall=true;
       mesh.position.set(x, wallHeight / 2, z); mesh.receiveShadow = true; mesh.castShadow = true; scene.add(mesh);
     }
     wall(0, -roomHalf, roomSize, wallThickness); wall(0, roomHalf, roomSize, wallThickness);
@@ -179,6 +180,29 @@
       blaster.rotation.z*=Math.exp(-14*dt);
       syncAim();
     }
+    const bulletMarks=[];
+    const markGeometry=new THREE.CircleGeometry(.045,16);
+    const markMaterial=new THREE.MeshBasicMaterial({
+      color:0x292524, side:THREE.DoubleSide, depthWrite:false,
+      polygonOffset:true, polygonOffsetFactor:-1, polygonOffsetUnits:-1
+    });
+    function addBulletMark(impact,now) {
+      if (!impact?.object.userData.isWall || !impact.face) return;
+      const normal=impact.face.normal.clone().transformDirection(impact.object.matrixWorld);
+      const mark=new THREE.Mesh(markGeometry,markMaterial);
+      mark.position.copy(impact.point).addScaledVector(normal,.003);
+      mark.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal);
+      mark.userData.isBulletMark=true;
+      scene.add(mark); bulletMarks.push({mark,expiresAt:now+5000});
+    }
+    function expireBulletMarks(now) {
+      for(let i=bulletMarks.length-1;i>=0;i--) {
+        if(now>=bulletMarks[i].expiresAt) {
+          scene.remove(bulletMarks[i].mark);
+          bulletMarks.splice(i,1);
+        }
+      }
+    }
     const beams=[];
     function updateScore() { scoreLabel.textContent = `점수 ${score} · 명중 ${hits}/${shots}`; }
     updateScore();
@@ -191,8 +215,9 @@
       const direction=new THREE.Vector3(spread.x,spread.y,-1).normalize().applyQuaternion(camera.getWorldQuaternion(new THREE.Quaternion()));
       ray.set(camera.getWorldPosition(new THREE.Vector3()),direction);
       // Props and walls block shots; viewmodel and inactive targets are excluded.
-      const objects=scene.children.filter(o=>o!==camera && o.visible && !o.isLine);
+      const objects=scene.children.filter(o=>o!==camera && o.visible && !o.isLine && !o.userData.isBulletMark);
       const impact=ray.intersectObjects(objects,true)[0];
+      addBulletMark(impact,now);
       const dummy=impact?.object.userData.dummy;
       if(dummy && dummy.hp>0) {
         const isHeadshot = impact.object.userData.isHead === true;
@@ -328,6 +353,7 @@
       settleRecoil(dt, now);
       if (!playing()) stopFiring();
       else if (firePointer !== null || keys.has('Enter') || keys.has('NumpadEnter')) shoot();
+      expireBulletMarks(now);
       muzzle.visible = now-lastShot<65;
       blaster.position.z += (-.65-blaster.position.z)*Math.min(1,dt*18);
       if(now>effectUntil) hitLabel.textContent='';
