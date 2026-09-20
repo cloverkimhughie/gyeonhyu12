@@ -349,20 +349,23 @@
 
     function findRespawnPosition(dummy, random=Math.random) {
       const limit=roomHalf-wallThickness/2-.8;
+      // Spawn is at Z=5 facing -Z: only the far side of the bar is allowed.
+      // This boundary is fixed to the room, not the player's current position.
+      const maxSpawnZ=Math.min(limit,redBar.position.z-redBarDepth/2-.8);
       function valid(x,z) {
-        if(Math.abs(z-redBar.position.z)<redBarDepth/2+.8) return false;
+        if(z>maxSpawnZ) return false;
         if(Math.hypot(x-camera.position.x,z-camera.position.z)<2) return false;
         if(Math.hypot(x-dummy.group.position.x,z-dummy.group.position.z)<2) return false;
         return dummies.every(other=>other===dummy || !other.group.visible ||
           Math.hypot(x-other.group.position.x,z-other.group.position.z)>=1.8);
       }
       for(let i=0;i<100;i++) {
-        const x=(random()*2-1)*limit,z=(random()*2-1)*limit;
+        const x=(random()*2-1)*limit,z=-limit+random()*(maxSpawnZ+limit);
         if(valid(x,z)) return {x,z};
       }
       // Bounded fallback: choose among clear grid cells, never force an overlap.
       const candidates=[];
-      for(let x=-limit;x<=limit;x+=1.5) for(let z=-limit;z<=limit;z+=1.5) {
+      for(let x=-limit;x<=limit;x+=1.5) for(let z=-limit;z<=maxSpawnZ;z+=1.5) {
         if(valid(x,z)) candidates.push({x,z});
       }
       return candidates.length ? candidates[Math.min(candidates.length-1,Math.floor(random()*candidates.length))] : null;
