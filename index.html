@@ -102,8 +102,8 @@
     [[-5,-6],[0,-6],[5,-6],[-6,0],[6,1]].forEach(([x,z],i) => {
       const group = new THREE.Group(); group.position.set(x,0,z); scene.add(group);
       const dummy = {group, hp:3, respawn:0, flash:0, parts:[]}; dummies.push(dummy);
-      [[.65,.65,.55,0,2.1,0],[.85,.9,.45,0,1.3,0],[.25,.85,.35,-.59,1.3,0],[.25,.85,.35,.59,1.3,0],[.3,.8,.38,-.24,.4,0],[.3,.8,.38,.24,.4,0]].forEach(args => {
-        const part = block(group,...args,colors[i%colors.length]); part.userData.dummy=dummy; part.castShadow=true; dummy.parts.push(part);
+      [[.65,.65,.55,0,2.1,0],[.85,.9,.45,0,1.3,0],[.25,.85,.35,-.59,1.3,0],[.25,.85,.35,.59,1.3,0],[.3,.8,.38,-.24,.4,0],[.3,.8,.38,.24,.4,0]].forEach((args, partIndex) => {
+        const part = block(group,...args,colors[i%colors.length]); part.userData.dummy=dummy; part.userData.isHead=partIndex===0; part.castShadow=true; dummy.parts.push(part);
       });
       const badge = block(group,.38,.38,.03,0,1.4,.245,0xffffff); badge.userData.dummy=dummy;
       const bar = block(group,.95,.09,.06,0,2.65,0,0x34d399); dummy.bar=bar;
@@ -113,7 +113,7 @@
     const hitLabel = document.createElement('div'); hitLabel.id='hit'; hud.append(hitLabel);
     const fireButton = document.createElement('button'); fireButton.id='fire'; fireButton.textContent='발사'; document.querySelector('#mobile').append(fireButton);
     document.querySelector('#help').textContent += ' · 좌클릭 발사';
-    document.querySelector('#panel p').innerHTML += '<br>좌클릭 발사 · 마네킹 3회 명중 시 점수 획득<br>모바일: 방향 버튼 이동 · 화면 드래그 · 발사 버튼';
+    document.querySelector('#panel p').innerHTML += '<br>좌클릭 발사 · 몸통 3회 · 헤드샷 1회 명중 시 점수 획득<br>모바일: 방향 버튼 이동 · 화면 드래그 · 발사 버튼';
     const ray = new THREE.Raycaster();
     let shots=0, hits=0, score=0, lastShot=-1000, effectUntil=0;
     const beams=[];
@@ -129,8 +129,9 @@
       const impact=ray.intersectObjects(objects,true)[0];
       const dummy=impact?.object.userData.dummy;
       if(dummy && dummy.hp>0) {
-        hits++; dummy.hp--; dummy.flash=now+120; dummy.bar.scale.x=dummy.hp/3;
-        hitLabel.textContent=dummy.hp ? '명중!' : '+100'; effectUntil=now+400;
+        const isHeadshot = impact.object.userData.isHead === true;
+        hits++; dummy.hp=Math.max(0, dummy.hp-(isHeadshot ? 3 : 1)); dummy.flash=now+120; dummy.bar.scale.x=dummy.hp/3;
+        hitLabel.textContent=isHeadshot ? '헤드샷! +100' : (dummy.hp ? '명중!' : '+100'); effectUntil=now+(isHeadshot ? 800 : 400);
         if(!dummy.hp) {score+=100; dummy.group.visible=false; dummy.respawn=now+2500;}
       }
       const origin=muzzle.getWorldPosition(new THREE.Vector3());
