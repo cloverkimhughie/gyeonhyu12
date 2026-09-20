@@ -117,8 +117,8 @@
     const scoreLabel = document.createElement('div'); scoreLabel.id='score'; hud.append(scoreLabel);
     const hitLabel = document.createElement('div'); hitLabel.id='hit'; hud.append(hitLabel);
     const fireButton = document.createElement('button'); fireButton.id='fire'; fireButton.textContent='발사'; document.querySelector('#mobile').append(fireButton);
-    document.querySelector('#help').textContent += ' · 좌클릭 발사';
-    document.querySelector('#panel p').innerHTML += '<br>좌클릭 발사 · 몸통 3회 · 헤드샷 1회 명중 시 점수 획득<br>모바일: 방향 버튼 이동 · 화면 드래그 · 발사 버튼';
+    document.querySelector('#help').textContent += ' · 좌클릭 누르기: 연속 발사';
+    document.querySelector('#panel p').innerHTML += '<br>좌클릭 누르고 있기: 연속 발사 · 몸통 3회 · 헤드샷 1회 명중 시 점수 획득<br>모바일: 방향 버튼 이동 · 화면 드래그 · 발사 버튼 길게 누르기';
     const ray = new THREE.Raycaster();
     let shots=0, hits=0, score=0, lastShot=-1000, effectUntil=0;
     const beams=[];
@@ -144,8 +144,29 @@
       const beam=new THREE.Line(new THREE.BufferGeometry().setFromPoints([origin,end]),new THREE.LineBasicMaterial({color:0x67e8f9}));
       scene.add(beam); beams.push({beam,until:now+65}); updateScore();
     }
-    renderer.domElement.addEventListener('mousedown',e=>{if(e.button===0)shoot();});
-    fireButton.addEventListener('pointerdown',e=>{e.preventDefault();shoot();});
+    let firePointer = null;
+    function stopFiring() { firePointer = null; }
+    function beginFiring(e) {
+      if (e.button !== 0 || !playing() || firePointer !== null) return;
+      e.preventDefault();
+      firePointer = e.pointerId;
+      if (e.currentTarget === fireButton) fireButton.setPointerCapture(e.pointerId);
+      shoot();
+    }
+    renderer.domElement.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse') beginFiring(e);
+    });
+    fireButton.addEventListener('pointerdown', beginFiring);
+    for (const type of ['pointerup', 'pointercancel']) {
+      window.addEventListener(type, e => {
+        if (e.pointerId === firePointer) stopFiring();
+      });
+    }
+    fireButton.addEventListener('lostpointercapture', stopFiring);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { stopFiring(); keys.clear(); }
+    });
+
 
     const keys = new Set();
     let yaw = 0, pitch = 0, last = performance.now(), dragging = false, touchX = 0, touchY = 0;
@@ -153,8 +174,8 @@
     const start = document.querySelector('#start');
     const isCoarse = matchMedia('(pointer: coarse)').matches;
     start.addEventListener('click', () => { overlay.style.display = 'none'; if (!isCoarse) renderer.domElement.requestPointerLock(); });
-    document.addEventListener('pointerlockchange', () => { keys.clear(); if (!isCoarse) overlay.style.display = document.pointerLockElement ? 'none' : 'grid'; });
-    addEventListener('blur',()=>{keys.clear();dragging=false;});
+    document.addEventListener('pointerlockchange', () => { stopFiring(); keys.clear(); if (!isCoarse) overlay.style.display = document.pointerLockElement ? 'none' : 'grid'; });
+    addEventListener('blur',()=>{stopFiring();keys.clear();dragging=false;});
     renderer.domElement.addEventListener('pointercancel',()=>dragging=false);
     document.addEventListener('keydown', e => keys.add(e.code));
     document.addEventListener('keyup', e => keys.delete(e.code));
@@ -191,6 +212,8 @@
     function animate(now) {
       requestAnimationFrame(animate);
       const dt = Math.min((now-last)/1000, .05); last = now; update(dt);
+      if (!playing()) stopFiring();
+      else if (firePointer !== null) shoot();
       muzzle.visible = now-lastShot<65;
       blaster.position.z += (-.65-blaster.position.z)*Math.min(1,dt*18);
       if(now>effectUntil) hitLabel.textContent='';
