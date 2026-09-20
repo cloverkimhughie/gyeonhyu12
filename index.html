@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>First Person Room</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #111827; font-family: system-ui, sans-serif; }
+    canvas { display: block; }
+    #overlay { position: fixed; inset: 0; display: grid; place-items: center; background: linear-gradient(135deg, rgba(15,23,42,.94), rgba(30,41,59,.88)); color: white; z-index: 10; }
+    #panel { width: min(440px, calc(100% - 32px)); padding: 30px; border: 1px solid rgba(255,255,255,.18); border-radius: 22px; background: rgba(255,255,255,.08); text-align: center; backdrop-filter: blur(12px); box-shadow: 0 24px 70px rgba(0,0,0,.35); }
+    h1 { margin: 0 0 10px; font-size: clamp(26px, 7vw, 42px); }
+    p { margin: 8px 0; color: #cbd5e1; line-height: 1.6; }
+    button { margin-top: 18px; padding: 13px 28px; border: 0; border-radius: 999px; background: #60a5fa; color: #07111f; font-weight: 800; font-size: 16px; cursor: pointer; }
+    #hud { position: fixed; inset: 0; pointer-events: none; color: white; z-index: 5; }
+    #crosshair { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; transform: translate(-50%, -50%); }
+    #crosshair::before, #crosshair::after { content: ""; position: absolute; background: white; border-radius: 2px; box-shadow: 0 0 3px #000; }
+    #crosshair::before { width: 18px; height: 2px; top: 8px; }
+    #crosshair::after { width: 2px; height: 18px; left: 8px; }
+    #help { position: absolute; left: 16px; bottom: 16px; padding: 9px 12px; border-radius: 10px; background: rgba(15,23,42,.72); font-size: 13px; }
+    #mobile { display: none; position: fixed; inset: auto 0 18px; padding: 0 18px; justify-content: space-between; z-index: 7; pointer-events: none; }
+    .pad { display: grid; grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(2, 52px); gap: 5px; pointer-events: auto; }
+    .pad button { margin: 0; padding: 0; border-radius: 15px; background: rgba(15,23,42,.72); color: white; touch-action: none; }
+    .up { grid-column: 2; } .left { grid-column: 1; grid-row: 2; } .down { grid-column: 2; grid-row: 2; } .right { grid-column: 3; grid-row: 2; }
+    @media (pointer: coarse) { #mobile { display: flex; } #help { display: none; } }
+  </style>
+</head>
+<body>
+  <div id="overlay"><div id="panel"><h1>1인칭 방</h1><p>WASD로 이동하고 마우스로 둘러보세요.<br>Shift를 누르면 더 빠르게 움직입니다.</p><button id="start">게임 시작</button></div></div>
+  <div id="hud"><div id="crosshair"></div><div id="help">WASD 이동 · 마우스 시점 · Shift 달리기 · ESC 일시정지</div></div>
+  <div id="mobile"><div class="pad"><button class="up" data-key="KeyW">▲</button><button class="left" data-key="KeyA">◀</button><button class="down" data-key="KeyS">▼</button><button class="right" data-key="KeyD">▶</button></div></div>
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x94a3b8);
+    scene.fog = new THREE.Fog(0x94a3b8, 15, 32);
+
+    const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 100);
+    camera.position.set(0, 1.7, 5);
+    camera.rotation.order = 'YXZ';
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.prepend(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0xdbeafe, 0x334155, 1.7));
+    const light = new THREE.DirectionalLight(0xffffff, 2.2);
+    light.position.set(3, 7, 4); light.castShadow = true;
+    light.shadow.mapSize.set(1024, 1024); scene.add(light);
+
+    const roomSize = 18, roomHalf = roomSize / 2, wallHeight = 6, wallThickness = 0.45;
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(roomSize, roomSize), new THREE.MeshStandardMaterial({ color: 0xd6c5a8, roughness: .86 }));
+    floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+    const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(roomSize, roomSize), new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 1, side: THREE.DoubleSide }));
+    ceiling.position.y = wallHeight; ceiling.rotation.x = Math.PI / 2; scene.add(ceiling);
+
+    const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xe7e5e4, roughness: .9 });
+    function wall(x, z, width, depth) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, wallHeight, depth), wallMaterial);
+      mesh.position.set(x, wallHeight / 2, z); mesh.receiveShadow = true; mesh.castShadow = true; scene.add(mesh);
+    }
+    wall(0, -roomHalf, roomSize, wallThickness); wall(0, roomHalf, roomSize, wallThickness);
+    wall(-roomHalf, 0, wallThickness, roomSize); wall(roomHalf, 0, wallThickness, roomSize);
+
+    const trimMaterial = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: .75 });
+    for (const z of [-roomHalf + .3, roomHalf - .3]) wallTrim(0, .18, z, roomSize - .6, .36, .12);
+    for (const x of [-roomHalf + .3, roomHalf - .3]) wallTrim(x, .18, 0, .12, .36, roomSize - .6);
+    function wallTrim(x, y, z, w, h, d) { const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), trimMaterial); m.position.set(x,y,z); scene.add(m); }
+
+    // A few simple Roblox-like block props make movement and scale easier to read.
+    const colors = [0x60a5fa, 0xfbbf24, 0xf87171, 0x34d399];
+    [[-5,.75,-4,1.5],[4,1,-3,2],[-3,.5,3,1],[4.5,.65,3.5,1.3]].forEach(([x,y,z,s], i) => {
+      const cube = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), new THREE.MeshStandardMaterial({ color: colors[i], roughness: .65 }));
+      cube.position.set(x,y,z); cube.castShadow = true; cube.receiveShadow = true; scene.add(cube);
+    });
+
+    const keys = new Set();
+    let yaw = 0, pitch = 0, last = performance.now(), dragging = false, touchX = 0, touchY = 0;
+    const overlay = document.querySelector('#overlay');
+    const start = document.querySelector('#start');
+    const isCoarse = matchMedia('(pointer: coarse)').matches;
+    start.addEventListener('click', () => { overlay.style.display = 'none'; if (!isCoarse) renderer.domElement.requestPointerLock(); });
+    document.addEventListener('pointerlockchange', () => { if (!isCoarse) overlay.style.display = document.pointerLockElement ? 'none' : 'grid'; });
+    document.addEventListener('keydown', e => keys.add(e.code));
+    document.addEventListener('keyup', e => keys.delete(e.code));
+    document.addEventListener('mousemove', e => {
+      if (document.pointerLockElement === renderer.domElement) look(e.movementX, e.movementY);
+    });
+    renderer.domElement.addEventListener('pointerdown', e => { if (isCoarse) { dragging = true; touchX = e.clientX; touchY = e.clientY; } });
+    renderer.domElement.addEventListener('pointermove', e => { if (dragging) { look(e.clientX-touchX, e.clientY-touchY); touchX=e.clientX; touchY=e.clientY; } });
+    renderer.domElement.addEventListener('pointerup', () => dragging = false);
+    function look(dx, dy) { yaw -= dx * .0022; pitch -= dy * .0022; pitch = Math.max(-1.48, Math.min(1.48, pitch)); camera.rotation.set(pitch, yaw, 0); }
+
+    document.querySelectorAll('[data-key]').forEach(btn => {
+      const code = btn.dataset.key;
+      btn.addEventListener('pointerdown', e => { e.preventDefault(); keys.add(code); });
+      ['pointerup','pointercancel','pointerleave'].forEach(type => btn.addEventListener(type, () => keys.delete(code)));
+    });
+
+    function update(dt) {
+      const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 7.2 : 4.2) * dt;
+      let forward = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
+      let side = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
+      if (forward || side) {
+        const length = Math.hypot(forward, side); forward /= length; side /= length;
+        const dx = (-Math.sin(yaw) * forward + Math.cos(yaw) * side) * speed;
+        const dz = (-Math.cos(yaw) * forward - Math.sin(yaw) * side) * speed;
+        const limit = roomHalf - wallThickness - .45;
+        camera.position.x = THREE.MathUtils.clamp(camera.position.x + dx, -limit, limit);
+        camera.position.z = THREE.MathUtils.clamp(camera.position.z + dz, -limit, limit);
+      }
+      camera.position.y = 1.7;
+    }
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+      const dt = Math.min((now-last)/1000, .05); last = now; update(dt); renderer.render(scene, camera);
+    }
+    requestAnimationFrame(animate);
+    addEventListener('resize', () => { camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+  </script>
+</body>
+</html>
