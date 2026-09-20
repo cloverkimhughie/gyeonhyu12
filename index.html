@@ -207,6 +207,18 @@
     });
 
 
+    let feetY=0, verticalSpeed=0, grounded=true;
+    function jump() {
+      if (!playing() || !grounded) return;
+      verticalSpeed=6.5; grounded=false;
+    }
+    const jumpButton=document.createElement('button');
+    jumpButton.textContent='점프';
+    jumpButton.style.cssText='pointer-events:auto;touch-action:none;align-self:end;padding:13px 18px';
+    document.querySelector('#mobile').insertBefore(jumpButton,fireButton);
+    jumpButton.addEventListener('pointerdown',e=>{e.preventDefault();jump();});
+    document.querySelector('#help').textContent+=' · Space 점프';
+    document.querySelector('#panel p').innerHTML+='<br>Space / 모바일 점프 버튼: 구조물 뛰어넘기';
     const keys = new Set();
     let yaw = 0, pitch = 0, last = performance.now(), dragging = false, touchX = 0, touchY = 0;
     const overlay = document.querySelector('#overlay');
@@ -217,6 +229,12 @@
     addEventListener('blur',()=>{stopFiring();keys.clear();dragging=false;});
     renderer.domElement.addEventListener('pointercancel',()=>dragging=false);
     document.addEventListener('keydown', e => {
+      if (e.code === 'Space') {
+        if (!playing()) return;
+        e.preventDefault();
+        if (!e.repeat) jump();
+        return;
+      }
       if (e.code === 'Enter' || e.code === 'NumpadEnter') {
         if (!playing()) return;
         e.preventDefault(); // Do not activate a still-focused menu button.
@@ -243,6 +261,7 @@
     // The bar spans the entire walkable room width. Sweep against its two
     // faces with player radius, preserving sideways motion and preventing tunneling.
     function collideRedBar(oldZ, nextZ) {
+      if (feetY >= redBarHeight-1e-6) return nextZ;
       const playerRadius = .45;
       const front = redBar.position.z + redBarDepth / 2 + playerRadius;
       const back = redBar.position.z - redBarDepth / 2 - playerRadius;
@@ -267,7 +286,14 @@
         camera.position.x = THREE.MathUtils.clamp(camera.position.x + dx, -limit, limit);
         camera.position.z = collideRedBar(oldZ, THREE.MathUtils.clamp(camera.position.z + dz, -limit, limit));
       }
-      camera.position.y = PLAYER_EYE_HEIGHT;
+      const overBar=Math.abs(camera.position.z-redBar.position.z)<redBarDepth/2+.45-1e-6;
+      const support=overBar && feetY>=redBarHeight-1e-6 ? redBarHeight : 0;
+      verticalSpeed-=16*dt;
+      const nextFeet=feetY+verticalSpeed*dt;
+      if (verticalSpeed<=0 && nextFeet<=support) {
+        feetY=support; verticalSpeed=0; grounded=true;
+      } else {feetY=nextFeet; grounded=false;}
+      camera.position.y = PLAYER_EYE_HEIGHT+feetY;
       // Actual displacement includes wall clamping and diagonal normalization.
       movementSpeed=dt>0 ? Math.hypot(camera.position.x-oldX,camera.position.z-oldZ)/dt : 0;
     }
