@@ -223,7 +223,7 @@
         const isHeadshot = impact.object.userData.isHead === true;
         hits++; dummy.hp=Math.max(0, dummy.hp-(isHeadshot ? 3 : 1)); dummy.flash=now+120; dummy.bar.scale.x=dummy.hp/3;
         hitLabel.textContent=isHeadshot ? '헤드샷! +100' : (dummy.hp ? '명중!' : '+100'); effectUntil=now+(isHeadshot ? 800 : 400);
-        if(!dummy.hp) {score+=100; dummy.group.visible=false; dummy.respawn=now+2500;}
+        if(!dummy.hp) {score+=100; dummy.group.visible=false; dummy.respawn=now;}
       }
       const origin=muzzle.getWorldPosition(new THREE.Vector3());
       const end=impact ? impact.point : ray.ray.at(30,new THREE.Vector3());
@@ -379,7 +379,7 @@
       blaster.position.z += (-.65-blaster.position.z)*Math.min(1,dt*18);
       if(now>effectUntil) hitLabel.textContent='';
       for(const dummy of dummies) {
-        if(dummy.respawn && now>=dummy.respawn) {
+        if(dummy.hp===0 && now>=dummy.respawn) {
           const position=findRespawnPosition(dummy);
           if(position) {
             dummy.group.position.set(position.x,0,position.z);
