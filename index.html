@@ -117,8 +117,8 @@
     const scoreLabel = document.createElement('div'); scoreLabel.id='score'; hud.append(scoreLabel);
     const hitLabel = document.createElement('div'); hitLabel.id='hit'; hud.append(hitLabel);
     const fireButton = document.createElement('button'); fireButton.id='fire'; fireButton.textContent='발사'; document.querySelector('#mobile').append(fireButton);
-    document.querySelector('#help').textContent += ' · 좌클릭 누르기: 연속 발사';
-    document.querySelector('#panel p').innerHTML += '<br>좌클릭 누르고 있기: 연속 발사 · 몸통 3회 · 헤드샷 1회 명중 시 점수 획득<br>모바일: 방향 버튼 이동 · 화면 드래그 · 발사 버튼 길게 누르기';
+    document.querySelector('#help').textContent += ' · 좌클릭 / Enter 누르기: 연속 발사';
+    document.querySelector('#panel p').innerHTML += '<br>좌클릭 / Enter 누르고 있기: 연속 발사 · 몸통 3회 · 헤드샷 1회 명중 시 점수 획득<br>모바일: 방향 버튼 이동 · 화면 드래그 · 발사 버튼 길게 누르기';
     const ray = new THREE.Raycaster();
     let movementSpeed = 0;
     // Arcade spread: sample uniformly over a disk in camera-local aim space.
@@ -211,7 +211,15 @@
     document.addEventListener('pointerlockchange', () => { stopFiring(); keys.clear(); if (!isCoarse) overlay.style.display = document.pointerLockElement ? 'none' : 'grid'; });
     addEventListener('blur',()=>{stopFiring();keys.clear();dragging=false;});
     renderer.domElement.addEventListener('pointercancel',()=>dragging=false);
-    document.addEventListener('keydown', e => keys.add(e.code));
+    document.addEventListener('keydown', e => {
+      if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+        if (!playing()) return;
+        e.preventDefault(); // Do not activate a still-focused menu button.
+        if (!e.repeat && !keys.has(e.code)) { keys.add(e.code); shoot(); }
+        return;
+      }
+      keys.add(e.code);
+    });
     document.addEventListener('keyup', e => keys.delete(e.code));
     document.addEventListener('mousemove', e => {
       if (document.pointerLockElement === renderer.domElement) look(e.movementX, e.movementY);
@@ -252,7 +260,7 @@
       const dt = Math.min((now-last)/1000, .05); last = now; update(dt);
       settleRecoil(dt, now);
       if (!playing()) stopFiring();
-      else if (firePointer !== null) shoot();
+      else if (firePointer !== null || keys.has('Enter') || keys.has('NumpadEnter')) shoot();
       muzzle.visible = now-lastShot<65;
       blaster.position.z += (-.65-blaster.position.z)*Math.min(1,dt*18);
       if(now>effectUntil) hitLabel.textContent='';
