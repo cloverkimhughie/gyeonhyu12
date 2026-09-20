@@ -121,6 +121,28 @@
     document.querySelector('#panel p').innerHTML += '<br>좌클릭 누르고 있기: 연속 발사 · 몸통 3회 · 헤드샷 1회 명중 시 점수 획득<br>모바일: 방향 버튼 이동 · 화면 드래그 · 발사 버튼 길게 누르기';
     const ray = new THREE.Raycaster();
     let shots=0, hits=0, score=0, lastShot=-1000, effectUntil=0;
+    // Stylized arcade recoil offsets, independent of mouse/touch look input.
+    let recoilPitch=0, recoilYaw=0, recoilHeat=0;
+    function syncAim() {
+      camera.rotation.set(Math.max(-1.48, Math.min(1.48, pitch+recoilPitch)), yaw+recoilYaw, 0);
+    }
+    function kickRecoil() {
+      recoilHeat=Math.min(1, recoilHeat+.18);
+      recoilPitch=Math.min(.24, recoilPitch+.025+.025*recoilHeat);
+      recoilYaw=Math.max(-.055, Math.min(.055, recoilYaw+(Math.random()-.5)*(.018+.022*recoilHeat)));
+      blaster.rotation.x=.12+.06*recoilHeat;
+      blaster.rotation.z=(Math.random()-.5)*.06;
+      syncAim();
+    }
+    function settleRecoil(dt, now) {
+      const recovering=now-lastShot>240;
+      const decay=Math.exp(-(recovering ? 7 : 1.2)*dt);
+      recoilPitch*=decay; recoilYaw*=decay;
+      if(recovering) recoilHeat=Math.max(0,recoilHeat-dt*1.5);
+      blaster.rotation.x*=Math.exp(-14*dt);
+      blaster.rotation.z*=Math.exp(-14*dt);
+      syncAim();
+    }
     const beams=[];
     function updateScore() { scoreLabel.textContent = `점수 ${score} · 명중 ${hits}/${shots}`; }
     updateScore();
@@ -143,6 +165,8 @@
       const end=impact ? impact.point : ray.ray.at(30,new THREE.Vector3());
       const beam=new THREE.Line(new THREE.BufferGeometry().setFromPoints([origin,end]),new THREE.LineBasicMaterial({color:0x67e8f9}));
       scene.add(beam); beams.push({beam,until:now+65}); updateScore();
+      // Resolve this shot at the current crosshair before moving the next aim.
+      kickRecoil();
     }
     let firePointer = null;
     function stopFiring() { firePointer = null; }
@@ -185,7 +209,7 @@
     renderer.domElement.addEventListener('pointerdown', e => { if (isCoarse) { dragging = true; touchX = e.clientX; touchY = e.clientY; } });
     renderer.domElement.addEventListener('pointermove', e => { if (dragging) { look(e.clientX-touchX, e.clientY-touchY); touchX=e.clientX; touchY=e.clientY; } });
     renderer.domElement.addEventListener('pointerup', () => dragging = false);
-    function look(dx, dy) { yaw -= dx * .0022; pitch -= dy * .0022; pitch = Math.max(-1.48, Math.min(1.48, pitch)); camera.rotation.set(pitch, yaw, 0); }
+    function look(dx, dy) { yaw -= dx * .0022; pitch -= dy * .0022; pitch = Math.max(-1.48, Math.min(1.48, pitch)); syncAim(); }
 
     document.querySelectorAll('[data-key]').forEach(btn => {
       const code = btn.dataset.key;
@@ -212,6 +236,7 @@
     function animate(now) {
       requestAnimationFrame(animate);
       const dt = Math.min((now-last)/1000, .05); last = now; update(dt);
+      settleRecoil(dt, now);
       if (!playing()) stopFiring();
       else if (firePointer !== null) shoot();
       muzzle.visible = now-lastShot<65;
